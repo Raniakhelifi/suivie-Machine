@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Suivi Machines</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#191c22">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Suivi Machines">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root{
+  --bg: #191c22;
+  --panel: #22262f;
+  --panel-2: #2b303b;
+  --line: #383e4a;
+  --text: #e9ebf0;
+  --text-dim: #9099a8;
+  --amber: #f4b400;
+  --amber-dim: #6b5824;
+  --green: #3fa34d;
+  --green-dim: #1f4b28;
+  --orange: #e08e45;
+  --orange-dim: #5c4023;
+  --red: #d64545;
+  --red-dim: #5c2323;
+  --radius: 10px;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #232833 0%, transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  min-height:100vh;
+}
+.mono{font-family:'IBM Plex Mono',monospace;}
+.display{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:0.03em;}
+
+/* ---------- LED strip ---------- */
+.led-strip{display:flex; gap:6px; justify-content:center; margin-bottom:18px;}
+.led{width:9px; height:9px; border-radius:50%; background:var(--panel-2); box-shadow: inset 0 0 0 1px var(--line);}
+.led.on{background:var(--amber); box-shadow:0 0 8px 2px rgba(244,180,0,0.6);}
+
+/* ---------- Layout shells ---------- */
+.center-screen{
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+}
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:32px;
+  width:100%;
+  max-width:420px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.4);
+}
+.card h1{display:none;}
+
+.brand{text-align:center; margin-bottom:26px;}
+.brand .display{font-size:22px; font-weight:700; color:var(--text); letter-spacing:0.08em;}
+.brand .sub{color:var(--text-dim); font-size:12px; margin-top:4px; font-family:'IBM Plex Mono',monospace; letter-spacing:0.04em;}
+
+.tabs{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-bottom:20px;}
+.tab{flex:1; text-align:center; padding:10px; cursor:pointer; font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:0.05em; color:var(--text-dim); background:var(--panel-2); transition:all .15s;}
+.tab.active{background:var(--amber); color:#1a1500; font-weight:600;}
+
+label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:6px; font-family:'IBM Plex Mono',monospace; letter-spacing:0.03em;}
+input[type=text], input[type=password], input[type=time], input[type=date], select, textarea{
+  width:100%; padding:11px 12px; margin-bottom:16px;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:7px;
+  color:var(--text); font-family:'Inter',sans-serif; font-size:14px;
+}
+input:focus, select:focus, textarea:focus{outline:2px solid var(--amber); outline-offset:1px;}
+textarea{resize:vertical; min-height:70px;}
+
+button{
+  cursor:pointer; border:none; border-radius:7px; font-family:'Oswald',sans-serif;
+  letter-spacing:0.04em; font-weight:600; transition:transform .1s, filter .15s;
+}
+button:active{transform:scale(0.98);}
+.btn-primary{
+  width:100%; padding:13px; background:var(--amber); color:#1a1500; font-size:14px;
+}
+.btn-primary:hover{filter:brightness(1.08);}
+.btn-ghost{
+  background:transparent; border:1px solid var(--line); color:var(--text-dim); padding:9px 14px; font-size:12px;
+}
+.btn-ghost:hover{border-color:var(--amber); color:var(--amber);}
+.error-msg{color:var(--red); font-size:12px; margin:-8px 0 14px; font-family:'IBM Plex Mono',monospace;}
+.hint{color:var(--text-dim); font-size:11px; margin-top:-10px; margin-bottom:16px; font-family:'IBM Plex Mono',monospace;}
+
+/* ---------- App shell ---------- */
+#app{display:none;}
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 28px; background:var(--panel); border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:10;
+}
+.topbar .left{display:flex; align-items:center; gap:14px;}
+.topbar .display{font-size:17px; font-weight:600;}
+.topbar .who{font-size:12px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace;}
+.topbar .right{display:flex; gap:10px; align-items:center;}
+
+.wrap{max-width:1000px; margin:0 auto; padding:28px 20px 60px;}
+.section-title{font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:0.08em; color:var(--text-dim); text-transform:uppercase; margin:28px 0 12px;}
+.section-title:first-child{margin-top:0;}
+
+/* status board */
+.machine-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px;}
+.machine-tile{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:16px; position:relative; overflow:hidden;
+}
+.machine-tile .m-name{font-family:'Oswald',sans-serif; font-size:15px; font-weight:600; margin-bottom:8px;}
+.machine-tile .m-status{display:flex; align-items:center; gap:7px; font-size:12px; font-family:'IBM Plex Mono',monospace;}
+.dot{width:9px; height:9px; border-radius:50%; flex-shrink:0;}
+.dot.Production{background:var(--green); box-shadow:0 0 6px 1px rgba(63,163,77,0.7);}
+.dot.Arret{background:var(--orange); box-shadow:0 0 6px 1px rgba(224,142,69,0.7);}
+.dot.Panne{background:var(--red); box-shadow:0 0 6px 1px rgba(214,69,69,0.7); animation:blink 1.4s infinite;}
+.dot.none{background:var(--line);}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.35;}}
+.machine-tile .m-time{color:var(--text-dim); font-size:11px; margin-top:6px; font-family:'IBM Plex Mono',monospace;}
+
+/* status pills */
+.pill{display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-family:'IBM Plex Mono',monospace; font-weight:500;}
+.pill.Production{background:var(--green-dim); color:#7fdc8c;}
+.pill.Arret{background:var(--orange-dim); color:#f2b784;}
+.pill.Panne{background:var(--red-dim); color:#f29999;}
+
+/* form card */
+.form-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px;}
+.status-choice{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:18px;}
+.status-btn{padding:14px 6px; border-radius:8px; border:1.5px solid var(--line); background:var(--panel-2); color:var(--text-dim); font-family:'Oswald',sans-serif; font-size:12.5px; letter-spacing:0.03em; text-align:center;}
+.status-btn.sel-Production{border-color:var(--green); background:var(--green-dim); color:#8ce89a;}
+.status-btn.sel-Arret{border-color:var(--orange); background:var(--orange-dim); color:#f2c093;}
+.status-btn.sel-Panne{border-color:var(--red); background:var(--red-dim); color:#f2a3a3;}
+
+/* table */
+table{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;}
+thead th{text-align:left; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; padding:10px 14px; background:var(--panel-2); border-bottom:1px solid var(--line);}
+tbody td{padding:11px 14px; font-size:13px; border-bottom:1px solid var(--line);}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:var(--panel-2);}
+.empty-row{text-align:center; color:var(--text-dim); padding:26px; font-family:'IBM Plex Mono',monospace; font-size:12px;}
+
+.filters{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;}
+.filters select, .filters input{width:auto; min-width:130px; margin-bottom:0;}
+
+/* chef sub-nav */
+.chef-subtabs{display:flex; gap:8px; margin-bottom:22px;}
+.chef-subtab{padding:8px 16px; border-radius:20px; border:1px solid var(--line); background:var(--panel); color:var(--text-dim); font-family:'Oswald',sans-serif; font-size:12.5px; letter-spacing:0.04em; cursor:pointer;}
+.chef-subtab.active{background:var(--amber); color:#1a1500; border-color:var(--amber); font-weight:600;}
+
+/* technician cards */
+.tech-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px;}
+.tech-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:18px; cursor:pointer; transition:border-color .15s, transform .1s;
+}
+.tech-card:hover{border-color:var(--amber); transform:translateY(-2px);}
+.tech-card .t-name{font-family:'Oswald',sans-serif; font-size:17px; font-weight:600; margin-bottom:10px;}
+.tech-card .t-stats{display:flex; gap:14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim);}
+.tech-card .t-stats b{color:var(--text); font-size:15px; display:block; font-family:'Inter',sans-serif;}
+.tech-card .t-last{margin-top:10px; font-size:11px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace;}
+
+.back-link{display:inline-flex; align-items:center; gap:6px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; font-size:12px; cursor:pointer; margin-bottom:18px;}
+.back-link:hover{color:var(--amber);}
+.tech-detail-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;}
+.tech-detail-header .display{font-size:20px;}
+
+.settings-panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px; margin-bottom:20px;}
+.chip-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
+.chip{display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--line); border-radius:20px; padding:6px 8px 6px 14px; font-size:13px;}
+.chip button{background:transparent; border:none; color:var(--text-dim); font-size:15px; padding:0 4px; line-height:1;}
+.chip button:hover{color:var(--red);}
+.inline-add{display:flex; gap:8px;}
+.inline-add input{margin-bottom:0;}
+.inline-add button{padding:0 16px; white-space:nowrap;}
+
+.tech-row{display:flex; align-items:center; gap:10px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:8px;}
+.tech-row .tr-name{font-family:'Oswald',sans-serif; font-size:13.5px; min-width:110px;}
+.tech-row input{margin-bottom:0; flex:1; min-width:0;}
+.tech-row button{white-space:nowrap; padding:0 14px; height:38px;}
+.tech-row .tr-del{background:transparent; border:1px solid var(--line); color:var(--text-dim); width:38px; height:38px; padding:0; font-size:15px;}
+.tech-row .tr-del:hover{border-color:var(--red); color:var(--red);}
+
+.toast{
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:var(--amber); color:#1a1500; padding:11px 20px; border-radius:8px;
+  font-family:'Oswald',sans-serif; font-size:13px; font-weight:600; letter-spacing:0.03em;
+  box-shadow:0 10px 30px rgba(0,0,0,0.4); opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;
+  z-index:100;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
+
+@media(max-width:600px){
+  .topbar{padding:14px 16px;}
+  .wrap{padding:20px 14px 50px;}
+  .status-choice{grid-template-columns:1fr; }
+  .filters select, .filters input{min-width:100%;}
+}
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="center-screen">
+  <div class="card">
+    <div class="led-strip" id="led-strip"></div>
+    <div class="brand">
+      <div class="display">Suivi Machines</div>
+      <div class="sub">JOURNAL DE PRODUCTION &amp; PANNES</div>
+      <div class="sub" id="storage-mode" style="margin-top:6px;"></div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" id="tab-tech" onclick="switchTab('tech')">Technicien</div>
+      <div class="tab" id="tab-chef" onclick="switchTab('chef')">Chef d'équipe</div>
+    </div>
+
+    <div id="tech-login">
+      <label>Nom</label>
+      <select id="tech-name"></select>
+      <label>Mot de passe</label>
+      <input type="password" id="tech-pass" onkeydown="if(event.key==='Enter') loginTech()">
+      <div class="error-msg" id="tech-err" style="display:none;"></div>
+      <button class="btn-primary" onclick="loginTech()">Se connecter</button>
+    </div>
+
+    <div id="chef-login" style="display:none;">
+      <label>Mot de passe chef</label>
+      <input type="password" id="chef-pass" onkeydown="if(event.key==='Enter') loginChef()">
+      <div class="hint">Mot de passe par défaut : admin123</div>
+      <div class="error-msg" id="chef-err" style="display:none;"></div>
+      <button class="btn-primary" onclick="loginChef()">Se connecter</button>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="left">
+      <div class="display" id="topbar-title">SUIVI MACHINES</div>
+    </div>
+    <div class="right">
+      <div class="who" id="topbar-who"></div>
+      <button class="btn-ghost" id="settings-btn" style="display:none;" onclick="toggleSettings()">Paramètres</button>
+      <button class="btn-ghost" onclick="logout()">Déconnexion</button>
+    </div>
+  </div>
+  <div class="wrap" id="wrap"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+const STATUSES = ["Production","Arret","Panne"];
+const STATUS_LABEL = {Production:"Production", Arret:"Arrêt", Panne:"Panne"};
+
+let DATA = null; // { chefPassword, technicians:[{name,password}], machines:[...], fiches:[...] }
+let session = null; // {role:'tech'|'chef', name}
+let settingsOpen = false;
+let chefSubTab = 'overview'; // 'overview' | 'tech'
+let selectedTechName = null; // technicien affiché dans la vue "Par technicien"
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function nowHHMM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function fmtDateFR(iso){ const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t=setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+function buildLedStrip(){
+  const strip=document.getElementById('led-strip');
+  strip.innerHTML='';
+  for(let i=0;i<7;i++){
+    const l=document.createElement('div');
+    l.className='led'+(Math.random()>0.4?' on':'');
+    strip.appendChild(l);
+  }
+}
+
+// Stockage : Firebase Realtime Database — partagé en temps réel entre tous les
+// appareils (téléphones des techniciens + ordinateur du chef).
+const firebaseConfig = {
+  apiKey: "AIzaSyAXrCEAAr7veqGev9Lnfxh_BquaTuRUd08",
+  authDomain: "rania-app-89efc.firebaseapp.com",
+  databaseURL: "https://rania-app-89efc-default-rtdb.firebaseio.com",
+  projectId: "rania-app-89efc",
+  storageBucket: "rania-app-89efc.firebasestorage.app",
+  messagingSenderId: "816246250359",
+  appId: "1:816246250359:web:18c4a3c71e67c1a5e69f72"
+};
+firebase.initializeApp(firebaseConfig);
+const dbRef = firebase.database().ref('app-data');
+let firebaseOK = true;
+
+function defaultData(){
+  return {
+    chefPassword:'admin123',
+    technicians:[
+      {name:'Waid', password:'1234'},
+      {name:'Mourade', password:'1234'},
+      {name:'Wissem', password:'1234'}
+    ],
+    machines:['M1','M2','M3','M4','M5'],
+    fiches:[]
+  };
+}
+
+async function saveData(){
+  await dbRef.set(DATA);
+}
+
+let _loadPromise = null;
+function loadData(){
+  if(_loadPromise) return _loadPromise;
+  _loadPromise = new Promise((resolve)=>{
+    let first = true;
+    dbRef.on('value', snap=>{
+      const val = snap.val();
+      if(val){
+        DATA = val;
+        DATA.technicians = DATA.technicians || [];
+        DATA.machines = DATA.machines || [];
+        DATA.fiches = DATA.fiches || [];
+      }else if(first){
+        DATA = defaultData();
+        dbRef.set(DATA);
+      }
+      if(first){
+        first = false;
+        resolve();
+      }else{
+        // mise à jour reçue d'un autre appareil (temps réel)
+        populateTechSelect();
+        if(session) render();
+      }
+    }, err=>{
+      firebaseOK = false;
+      if(first){ DATA = defaultData(); first=false; resolve(); }
+    });
+  });
+  return _loadPromise;
+}
+
+function switchTab(which){
+  document.getElementById('tab-tech').classList.toggle('active', which==='tech');
+  document.getElementById('tab-chef').classList.toggle('active', which==='chef');
+  document.getElementById('tech-login').style.display = which==='tech' ? 'block':'none';
+  document.getElementById('chef-login').style.display = which==='chef' ? 'block':'none';
+}
+
+function populateTechSelect(){
+  const sel=document.getElementById('tech-name');
+  sel.innerHTML='';
+  if(DATA.technicians.length===0){
+    const o=document.createElement('option');
+    o.textContent="Aucun technicien configuré — voir le chef";
+    o.disabled=true; o.selected=true;
+    sel.appendChild(o);
+    return;
+  }
+  DATA.technicians.forEach(t=>{
+    const o=document.createElement('option');
+    o.value=t.name; o.textContent=t.name;
+    sel.appendChild(o);
+  });
+}
+
+async function loginTech(){
+  const name=document.getElementById('tech-name').value;
+  const pass=document.getElementById('tech-pass').value;
+  const err=document.getElementById('tech-err');
+  const t=DATA.technicians.find(x=>x.name===name);
+  if(!t || t.password!==pass){
+    err.textContent='Nom ou mot de passe incorrect.';
+    err.style.display='block';
+    return;
+  }
+  err.style.display='none';
+  session={role:'tech', name};
+  enterApp();
+}
+
+async function loginChef(){
+  const pass=document.getElementById('chef-pass').value;
+  const err=document.getElementById('chef-err');
+  if(pass!==DATA.chefPassword){
+    err.textContent='Mot de passe incorrect.';
+    err.style.display='block';
+    return;
+  }
+  err.style.display='none';
+  session={role:'chef', name:'Chef'};
+  enterApp();
+}
+
+function logout(){
+  session=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('tech-pass').value='';
+  document.getElementById('chef-pass').value='';
+  settingsOpen=false;
+  chefSubTab='overview';
+  selectedTechName=null;
+}
+
+async function enterApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  await loadData();
+  document.getElementById('topbar-who').textContent = session.role==='chef' ? 'CHEF D\u2019ÉQUIPE' : session.name.toUpperCase();
+  document.getElementById('settings-btn').style.display = session.role==='chef' ? 'inline-block':'none';
+  document.getElementById('topbar-title').textContent = session.role==='chef' ? 'TABLEAU DE BORD' : 'MA FICHE DU JOUR';
+  render();
+}
+
+function toggleSettings(){
+  settingsOpen=!settingsOpen;
+  render();
+}
+
+/* ---------- latest status per machine ---------- */
+function latestStatusByMachine(){
+  const map={};
+  DATA.fiches.forEach(f=>{
+    if(!map[f.machine] || f.timestamp > map[f.machine].timestamp){
+      map[f.machine]=f;
+    }
+  });
+  return map;
+}
+
+/* ---------- RENDER ---------- */
+function render(){
+  const wrap=document.getElementById('wrap');
+  wrap.innerHTML='';
+  if(session.role==='tech') renderTech(wrap);
+  else renderChef(wrap);
+}
+
+function renderTech(wrap){
+  // status board (read-only overview)
+  const latest = latestStatusByMachine();
+  const boardTitle=document.createElement('div');
+  boardTitle.className='section-title'; boardTitle.textContent='État actuel des machines';
+  wrap.appendChild(boardTitle);
+  wrap.appendChild(buildMachineGrid(latest));
+
+  // form
+  const formTitle=document.createElement('div');
+  formTitle.className='section-title'; formTitle.textContent='Nouvelle fiche';
+  wrap.appendChild(formTitle);
+
+  const card=document.createElement('div'); card.className='form-card';
+
+  if(DATA.machines.length===0){
+    card.innerHTML='<div class="hint" style="margin:0;">Aucune machine configurée. Demandez au chef d\u2019équipe d\u2019en ajouter dans Paramètres.</div>';
+    wrap.appendChild(card);
+    return;
+  }
+
+  let selStatus='Production';
+
+  const machineLabel=document.createElement('label'); machineLabel.textContent='Machine';
+  const machineSel=document.createElement('select');
+  DATA.machines.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; machineSel.appendChild(o); });
+
+  const statusLabel=document.createElement('label'); statusLabel.textContent='Statut';
+  const statusChoice=document.createElement('div'); statusChoice.className='status-choice';
+  STATUSES.forEach(s=>{
+    const b=document.createElement('div');
+    b.className='status-btn'+(s===selStatus?' sel-'+s:'');
+    b.textContent=STATUS_LABEL[s];
+    b.style.cursor='pointer';
+    b.onclick=()=>{
+      selStatus=s;
+      [...statusChoice.children].forEach(c=>c.className='status-btn');
+      b.className='status-btn sel-'+s;
+      descWrap.style.display = s==='Production' ? 'none':'block';
+    };
+    statusChoice.appendChild(b);
+  });
+
+  const timeLabel=document.createElement('label'); timeLabel.textContent='Heure';
+  const timeInput=document.createElement('input'); timeInput.type='time'; timeInput.value=nowHHMM();
+
+  const descWrap=document.createElement('div'); descWrap.style.display='none';
+  const descLabel=document.createElement('label'); descLabel.textContent='Description du problème';
+  const descInput=document.createElement('textarea'); descInput.placeholder='Décrire la panne ou la raison de l\u2019arrêt...';
+  descWrap.appendChild(descLabel); descWrap.appendChild(descInput);
+
+  const submitBtn=document.createElement('button'); submitBtn.className='btn-primary'; submitBtn.textContent='Enregistrer la fiche';
+  submitBtn.onclick=async ()=>{
+    if(selStatus!=='Production' && descInput.value.trim()===''){
+      showToast('Merci de décrire le problème.');
+      return;
+    }
+    const fiche={
+      id:uid(), date:todayISO(), heure:timeInput.value||nowHHMM(),
+      machine:machineSel.value, technicien:session.name, statut:selStatus,
+      description: selStatus==='Production' ? '' : descInput.value.trim(),
+      timestamp:Date.now()
+    };
+    DATA.fiches.push(fiche);
+    await saveData();
+    showToast('Fiche enregistrée.');
+    descInput.value='';
+    timeInput.value=nowHHMM();
+    render();
+  };
+
+  card.appendChild(machineLabel); card.appendChild(machineSel);
+  card.appendChild(statusLabel); card.appendChild(statusChoice);
+  card.appendChild(timeLabel); card.appendChild(timeInput);
+  card.appendChild(descWrap);
+  card.appendChild(submitBtn);
+  wrap.appendChild(card);
+
+  // today's entries by this tech
+  const myTitle=document.createElement('div');
+  myTitle.className='section-title'; myTitle.textContent="Mes fiches d'aujourd'hui";
+  wrap.appendChild(myTitle);
+  const mine = DATA.fiches.filter(f=>f.technicien===session.name && f.date===todayISO()).sort((a,b)=>b.timestamp-a.timestamp);
+  wrap.appendChild(buildFichesTable(mine, false));
+}
+
+function renderChef(wrap){
+  if(settingsOpen){
+    wrap.appendChild(buildSettingsPanel());
+  }
+
+  // sous-onglets : vue d'ensemble vs par technicien
+  const subtabs=document.createElement('div'); subtabs.className='chef-subtabs';
+  const ovBtn=document.createElement('div'); ovBtn.className='chef-subtab'+(chefSubTab==='overview'?' active':''); ovBtn.textContent="Vue d'ensemble";
+  ovBtn.onclick=()=>{ chefSubTab='overview'; render(); };
+  const techBtn=document.createElement('div'); techBtn.className='chef-subtab'+(chefSubTab==='tech'?' active':''); techBtn.textContent='Par technicien';
+  techBtn.onclick=()=>{ chefSubTab='tech'; render(); };
+  subtabs.appendChild(ovBtn); subtabs.appendChild(techBtn);
+  wrap.appendChild(subtabs);
+
+  if(chefSubTab==='tech'){
+    if(selectedTechName){
+      renderTechDetail(wrap, selectedTechName);
+    }else{
+      renderTechPicker(wrap);
+    }
+    return;
+  }
+
+  const latest = latestStatusByMachine();
+  const boardTitle=document.createElement('div');
+  boardTitle.className='section-title'; boardTitle.textContent='État en direct';
+  wrap.appendChild(boardTitle);
+  wrap.appendChild(buildMachineGrid(latest));
+
+  const histTitle=document.createElement('div');
+  histTitle.className='section-title'; histTitle.textContent='Historique des fiches';
+  wrap.appendChild(histTitle);
+
+  // filters
+  const filters=document.createElement('div'); filters.className='filters';
+
+  const dateInput=document.createElement('input'); dateInput.type='date'; dateInput.value=todayISO();
+  const machineSel=document.createElement('select');
+  machineSel.innerHTML='<option value="">Toutes les machines</option>'+DATA.machines.map(m=>`<option value="${m}">${m}</option>`).join('');
+  const techSel=document.createElement('select');
+  techSel.innerHTML='<option value="">Tous les techniciens</option>'+DATA.technicians.map(t=>`<option value="${t.name}">${t.name}</option>`).join('');
+  const statSel=document.createElement('select');
+  statSel.innerHTML='<option value="">Tous les statuts</option>'+STATUSES.map(s=>`<option value="${s}">${STATUS_LABEL[s]}</option>`).join('');
+  const clearBtn=document.createElement('button'); clearBtn.className='btn-ghost'; clearBtn.textContent='Toutes dates';
+  let showAllDates=false;
+  clearBtn.onclick=()=>{ showAllDates=!showAllDates; clearBtn.textContent = showAllDates ? 'Filtrer par date' : 'Toutes dates'; dateInput.style.display = showAllDates?'none':'inline-block'; applyFilters(); };
+
+  [dateInput, machineSel, techSel, statSel].forEach(el=>{ el.onchange=applyFilters; filters.appendChild(el); });
+  filters.appendChild(clearBtn);
+  wrap.appendChild(filters);
+
+  const tableHolder=document.createElement('div');
+  wrap.appendChild(tableHolder);
+
+  function applyFilters(){
+    let rows = DATA.fiches.slice();
+    if(!showAllDates) rows = rows.filter(f=>f.date===dateInput.value);
+    if(machineSel.value) rows = rows.filter(f=>f.machine===machineSel.value);
+    if(techSel.value) rows = rows.filter(f=>f.technicien===techSel.value);
+    if(statSel.value) rows = rows.filter(f=>f.statut===statSel.value);
+    rows.sort((a,b)=>b.timestamp-a.timestamp);
+    tableHolder.innerHTML='';
+    tableHolder.appendChild(buildFichesTable(rows, true));
+  }
+  applyFilters();
+}
+
+function renderTechPicker(wrap){
+  const title=document.createElement('div');
+  title.className='section-title'; title.style.marginTop='0'; title.textContent='Sélectionner un technicien';
+  wrap.appendChild(title);
+
+  if(DATA.technicians.length===0){
+    const hint=document.createElement('div'); hint.className='hint'; hint.textContent='Aucun technicien configuré.';
+    wrap.appendChild(hint);
+    return;
+  }
+
+  const grid=document.createElement('div'); grid.className='tech-grid';
+  const today=todayISO();
+  DATA.technicians.forEach(t=>{
+    const mine = DATA.fiches.filter(f=>f.technicien===t.name);
+    const todayCount = mine.filter(f=>f.date===today).length;
+    const last = mine.slice().sort((a,b)=>b.timestamp-a.timestamp)[0];
+
+    const card=document.createElement('div'); card.className='tech-card';
+    card.innerHTML=`
+      <div class="t-name">${t.name}</div>
+      <div class="t-stats">
+        <div><b>${todayCount}</b>aujourd'hui</div>
+        <div><b>${mine.length}</b>au total</div>
+      </div>
+      <div class="t-last">${last ? `Dernière fiche : ${fmtDateFR(last.date)} · ${last.heure}` : 'Aucune fiche enregistrée'}</div>
+    `;
+    card.onclick=()=>{ selectedTechName=t.name; render(); };
+    grid.appendChild(card);
+  });
+  wrap.appendChild(grid);
+}
+
+function renderTechDetail(wrap, techName){
+  const back=document.createElement('div'); back.className='back-link'; back.textContent='← Tous les techniciens';
+  back.onclick=()=>{ selectedTechName=null; render(); };
+  wrap.appendChild(back);
+
+  const header=document.createElement('div'); header.className='tech-detail-header';
+  header.innerHTML=`<div class="display">${techName}</div>`;
+  wrap.appendChild(header);
+
+  const allMine = DATA.fiches.filter(f=>f.technicien===techName);
+
+  // filtres propres à ce technicien
+  const filters=document.createElement('div'); filters.className='filters';
+  const dateInput=document.createElement('input'); dateInput.type='date'; dateInput.value=todayISO();
+  const machineSel=document.createElement('select');
+  machineSel.innerHTML='<option value="">Toutes les machines</option>'+DATA.machines.map(m=>`<option value="${m}">${m}</option>`).join('');
+  const statSel=document.createElement('select');
+  statSel.innerHTML='<option value="">Tous les statuts</option>'+STATUSES.map(s=>`<option value="${s}">${STATUS_LABEL[s]}</option>`).join('');
+  const clearBtn=document.createElement('button'); clearBtn.className='btn-ghost'; clearBtn.textContent='Toutes dates';
+  let showAllDates=false;
+  clearBtn.onclick=()=>{ showAllDates=!showAllDates; clearBtn.textContent = showAllDates ? 'Filtrer par date' : 'Toutes dates'; dateInput.style.display = showAllDates?'none':'inline-block'; applyFilters(); };
+
+  [dateInput, machineSel, statSel].forEach(el=>{ el.onchange=applyFilters; filters.appendChild(el); });
+  filters.appendChild(clearBtn);
+  wrap.appendChild(filters);
+
+  const tableHolder=document.createElement('div');
+  wrap.appendChild(tableHolder);
+
+  function applyFilters(){
+    let rows = allMine.slice();
+    if(!showAllDates) rows = rows.filter(f=>f.date===dateInput.value);
+    if(machineSel.value) rows = rows.filter(f=>f.machine===machineSel.value);
+    if(statSel.value) rows = rows.filter(f=>f.statut===statSel.value);
+    rows.sort((a,b)=>b.timestamp-a.timestamp);
+    tableHolder.innerHTML='';
+    tableHolder.appendChild(buildFichesTable(rows, false));
+  }
+  applyFilters();
+}
+
+function buildMachineGrid(latest){
+  const grid=document.createElement('div'); grid.className='machine-grid';
+  if(DATA.machines.length===0){
+    grid.innerHTML='<div class="hint">Aucune machine configurée.</div>';
+    return grid;
+  }
+  DATA.machines.forEach(m=>{
+    const f=latest[m];
+    const tile=document.createElement('div'); tile.className='machine-tile';
+    const statusClass = f ? f.statut : 'none';
+    tile.innerHTML=`
+      <div class="m-name">${m}</div>
+      <div class="m-status"><span class="dot ${statusClass}"></span> ${f ? STATUS_LABEL[f.statut] : 'Aucune donnée'}</div>
+      ${f ? `<div class="m-time">${fmtDateFR(f.date)} · ${f.heure} · ${f.technicien}</div>` : ''}
+    `;
+    grid.appendChild(tile);
+  });
+  return grid;
+}
+
+function buildFichesTable(rows, showTech){
+  const table=document.createElement('table');
+  table.innerHTML=`
+    <thead><tr>
+      <th>Date</th><th>Heure</th><th>Machine</th>${showTech?'<th>Technicien</th>':''}<th>Statut</th><th>Description</th>
+    </tr></thead>
+    <tbody></tbody>
+  `;
+  const tbody=table.querySelector('tbody');
+  if(rows.length===0){
+    tbody.innerHTML=`<tr><td colspan="${showTech?6:5}" class="empty-row">Aucune fiche.</td></tr>`;
+    return table;
+  }
+  rows.forEach(f=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td class="mono">${fmtDateFR(f.date)}</td>
+      <td class="mono">${f.heure}</td>
+      <td>${f.machine}</td>
+      ${showTech?`<td>${f.technicien}</td>`:''}
+      <td><span class="pill ${f.statut}">${STATUS_LABEL[f.statut]}</span></td>
+      <td style="color:var(--text-dim); font-size:12.5px;">${f.description||'—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  return table;
+}
+
+function buildSettingsPanel(){
+  const panel=document.createElement('div'); panel.className='settings-panel';
+
+  // Machines
+  const mTitle=document.createElement('div'); mTitle.className='section-title'; mTitle.style.marginTop='0'; mTitle.textContent='Machines';
+  panel.appendChild(mTitle);
+  const mChips=document.createElement('div'); mChips.className='chip-row';
+  DATA.machines.forEach(m=>{
+    const chip=document.createElement('div'); chip.className='chip';
+    chip.innerHTML=`<span>${m}</span>`;
+    const del=document.createElement('button'); del.textContent='×';
+    del.onclick=async ()=>{ DATA.machines=DATA.machines.filter(x=>x!==m); await saveData(); render(); };
+    chip.appendChild(del);
+    mChips.appendChild(chip);
+  });
+  panel.appendChild(mChips);
+  const mAdd=document.createElement('div'); mAdd.className='inline-add';
+  const mInput=document.createElement('input'); mInput.type='text'; mInput.placeholder='Nom de la machine (ex: M7)';
+  const mBtn=document.createElement('button'); mBtn.className='btn-ghost'; mBtn.textContent='Ajouter';
+  mBtn.onclick=async ()=>{
+    const v=mInput.value.trim();
+    if(!v) return;
+    if(DATA.machines.includes(v)){ showToast('Machine déjà existante.'); return; }
+    DATA.machines.push(v); await saveData(); mInput.value=''; render();
+  };
+  mAdd.appendChild(mInput); mAdd.appendChild(mBtn);
+  panel.appendChild(mAdd);
+
+  // Technicians
+  const tTitle=document.createElement('div'); tTitle.className='section-title'; tTitle.textContent='Techniciens';
+  panel.appendChild(tTitle);
+  const tHint=document.createElement('div'); tHint.className='hint'; tHint.style.marginTop='-2px'; tHint.textContent="Chaque technicien a son propre mot de passe. Modifiez-le puis cliquez sur Enregistrer.";
+  panel.appendChild(tHint);
+  const tList=document.createElement('div');
+  DATA.technicians.forEach(t=>{
+    const row=document.createElement('div'); row.className='tech-row';
+    const name=document.createElement('div'); name.className='tr-name'; name.textContent=t.name;
+    const passInput=document.createElement('input'); passInput.type='text'; passInput.value=t.password; passInput.placeholder='Mot de passe';
+    const saveBtn=document.createElement('button'); saveBtn.className='btn-ghost'; saveBtn.textContent='Enregistrer';
+    saveBtn.onclick=async ()=>{
+      const p=passInput.value.trim();
+      if(!p){ showToast('Le mot de passe ne peut pas être vide.'); return; }
+      t.password=p; await saveData(); showToast(`Mot de passe de ${t.name} mis à jour.`);
+    };
+    const delBtn=document.createElement('button'); delBtn.className='tr-del'; delBtn.textContent='×';
+    delBtn.onclick=async ()=>{ DATA.technicians=DATA.technicians.filter(x=>x.name!==t.name); await saveData(); render(); };
+    row.appendChild(name); row.appendChild(passInput); row.appendChild(saveBtn); row.appendChild(delBtn);
+    tList.appendChild(row);
+  });
+  panel.appendChild(tList);
+  const tAdd=document.createElement('div'); tAdd.className='inline-add'; tAdd.style.marginTop='10px';
+  const tNameInput=document.createElement('input'); tNameInput.type='text'; tNameInput.placeholder='Nom du technicien';
+  const tPassInput=document.createElement('input'); tPassInput.type='text'; tPassInput.placeholder='Mot de passe';
+  const tBtn=document.createElement('button'); tBtn.className='btn-ghost'; tBtn.textContent='Ajouter';
+  tBtn.onclick=async ()=>{
+    const n=tNameInput.value.trim(), p=tPassInput.value.trim();
+    if(!n || !p) return;
+    if(DATA.technicians.find(x=>x.name===n)){ showToast('Technicien déjà existant.'); return; }
+    DATA.technicians.push({name:n, password:p}); await saveData();
+    tNameInput.value=''; tPassInput.value=''; render();
+  };
+  tAdd.appendChild(tNameInput); tAdd.appendChild(tPassInput); tAdd.appendChild(tBtn);
+  panel.appendChild(tAdd);
+
+  // chef password
+  const pTitle=document.createElement('div'); pTitle.className='section-title'; pTitle.textContent='Mot de passe chef';
+  panel.appendChild(pTitle);
+  const pAdd=document.createElement('div'); pAdd.className='inline-add';
+  const pInput=document.createElement('input'); pInput.type='text'; pInput.placeholder='Nouveau mot de passe';
+  const pBtn=document.createElement('button'); pBtn.className='btn-ghost'; pBtn.textContent='Changer';
+  pBtn.onclick=async ()=>{
+    const v=pInput.value.trim();
+    if(!v) return;
+    DATA.chefPassword=v; await saveData(); pInput.value=''; showToast('Mot de passe mis à jour.');
+  };
+  pAdd.appendChild(pInput); pAdd.appendChild(pBtn);
+  panel.appendChild(pAdd);
+
+  return panel;
+}
+
+/* ---------- init ---------- */
+(async function init(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+  buildLedStrip();
+  await loadData();
+  populateTechSelect();
+  const modeEl=document.getElementById('storage-mode');
+  if(modeEl){
+    modeEl.textContent = firebaseOK ? '● TEMPS RÉEL — CONNECTÉ' : '⚠ CONNEXION IMPOSSIBLE — VÉRIFIEZ INTERNET';
+    modeEl.style.color = firebaseOK ? 'var(--green)' : 'var(--red)';
+  }
+})();
+</script>
+</body>
+</html>
