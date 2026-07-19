@@ -269,7 +269,10 @@ let settingsOpen = false;
 let chefSubTab = 'overview'; // 'overview' | 'tech'
 let selectedTechName = null; // technicien affiché dans la vue "Par technicien"
 
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+function todayISO(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function nowHHMM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function fmtDateFR(iso){ const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
